@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <grpc/support/port_platform.h>
-
 #include "src/core/lib/transport/metadata_batch.h"
 
 #include <string.h>
 
 #include <algorithm>
+#include <string>
 
+#include "src/core/lib/transport/timeout_encoding.h"
+#include "absl/base/no_destructor.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-
-#include "src/core/lib/transport/timeout_encoding.h"
 
 namespace grpc_core {
 namespace metadata_detail {
@@ -33,6 +33,45 @@ namespace metadata_detail {
 void DebugStringBuilder::Add(absl::string_view key, absl::string_view value) {
   if (!out_.empty()) out_.append(", ");
   absl::StrAppend(&out_, absl::CEscape(key), ": ", absl::CEscape(value));
+}
+
+void DebugStringBuilder::AddIfAllowListed(absl::string_view key,
+                                          absl::string_view value) {
+  if (IsAllowListed(key)) {
+    Add(key, value);
+  } else {
+    Add(key, absl::StrCat(value.size(), " bytes redacted by allow listing"));
+  }
+}
+
+bool DebugStringBuilder::IsAllowListed(const absl::string_view key) const {
+  static const absl::NoDestructor<absl::flat_hash_set<std::string>> allow_list(
+      {std::string(GrpcTimeoutMetadata::key()),
+       std::string(TeMetadata::key()),
+       std::string(ContentTypeMetadata::key()),
+       std::string(HttpSchemeMetadata::key()),
+       std::string(HttpMethodMetadata::key()),
+       std::string(GrpcEncodingMetadata ::key()),
+       std::string(GrpcInternalEncodingRequest::key()),
+       std::string(GrpcAcceptEncodingMetadata::key()),
+       std::string(UserAgentMetadata::key()),
+       std::string(GrpcMessageMetadata ::key()),
+       std::string(HostMetadata::key()),
+       std::string(EndpointLoadMetricsBinMetadata::key()),
+       std::string(GrpcServerStatsBinMetadata::key()),
+       std::string(GrpcTraceBinMetadata::key()),
+       std::string(GrpcTagsBinMetadata::key()),
+       std::string(XEnvoyPeerMetadata::key()),
+       std::string(HttpAuthorityMetadata::key()),
+       std::string(HttpPathMetadata::key()),
+       std::string(GrpcStatusMetadata::key()),
+       std::string(GrpcPreviousRpcAttemptsMetadata::key()),
+       std::string(GrpcRetryPushbackMsMetadata::key()),
+       std::string(HttpStatusMetadata::key()),
+       std::string(GrpcLbClientStatsMetadata::key()),
+       std::string(LbTokenMetadata::key()),
+       std::string(LbCostBinMetadata::key())});
+  return allow_list->contains(key);
 }
 
 void UnknownMap::Append(absl::string_view key, Slice value) {
